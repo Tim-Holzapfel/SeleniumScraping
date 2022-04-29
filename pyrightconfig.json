@@ -1,0 +1,26 @@
+{
+    "include": [
+        "src"
+    ],
+
+    "exclude": [
+        "src/SeleniumScraping/development_testing",
+        ".venv"
+    ],
+
+    "ignore": [
+        ".venv"
+    ],
+
+    "venv": ".venv",
+
+    "reportUnnecessaryIsInstance": false,
+
+    "python.analysis.diagnosticMode": "workspace",
+
+    "executionEnvironments": [{
+        "root": "src/SeleniumScraping",
+        "pythonVersion": "3.10",
+        "pythonPlatform": "Windows"
+    }]
+}

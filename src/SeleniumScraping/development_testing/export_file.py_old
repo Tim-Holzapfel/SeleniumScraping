@@ -1,0 +1,196 @@
+"""Export file to folder."""
+
+
+# Standard Library
+import os
+import re
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Optional
+
+# Thirdparty Library
+import numpy as np
+import pandas as pd
+
+# Package Library
+from SeleniumScraping.driver.torbrowser import FilePaths
+
+
+def export_file(google_drive: Optional[bool] = False):
+    r"""Export records data to the users desktop as a Stata file.
+
+    Returns
+    -------
+    None.
+
+    """
+    df_records = pd.read_feather(FilePaths.records_file)
+
+    def str_norm(x_ir: pd.Series) -> tuple[Any]:
+        x_norm = (
+            x_ir.str.normalize("NFKD")
+            .str.encode("ascii", errors="ignore")
+            .str.decode("utf-8"),
+        )
+        return x_norm
+
+    df_records = df_records.apply(
+        str_norm,
+        axis=1,
+        result_type="expand",
+    )
+
+    full_date = re.compile(r"\d{1}\s[A-Z][a-z]+\s\d{4}")
+
+    month_date = re.compile(r"^[A-Z][a-z]+\s\d{4}")
+
+    df_records["birth_year"] = [
+        datetime.strptime(str(date_), r"%Y") if date_ is not np.nan else None
+        for date_ in df_records["birth_date"].str.extract(
+            r"(\d{4})$", expand=False
+        )
+    ]
+
+    df_records["death_year"] = [
+        datetime.strptime(str(date_), r"%Y") if date_ is not np.nan else None
+        for date_ in df_records["death_date"].str.extract(
+            r"(\d{4})$", expand=False
+        )
+    ]
+
+    df_records["burial_year"] = [
+        datetime.strptime(str(date_), r"%Y") if date_ is not np.nan else None
+        for date_ in df_records["burial_date"].str.extract(
+            r"(\d{4})$", expand=False
+        )
+    ]
+
+    df_records["birth_date"] = [
+        datetime.strptime(date_, r"%d %B %Y")
+        if full_date.search(date_) is not None
+        else datetime.strptime(date_, r"%B %Y")
+        if month_date.search(date_) is not None
+        else None
+        for date_ in df_records["birth_date"]
+    ]
+
+    df_records["death_date"] = [
+        datetime.strptime(date_, r"%d %B %Y")
+        if full_date.search(date_) is not None
+        else datetime.strptime(date_, r"%B %Y")
+        if month_date.search(date_) is not None
+        else None
+        for date_ in df_records["death_date"]
+    ]
+
+    df_records["burial_date"] = [
+        datetime.strptime(date_, r"%d %B %Y")
+        if full_date.search(date_) is not None
+        else datetime.strptime(date_, r"%B %Y")
+        if month_date.search(date_) is not None
+        else None
+        for date_ in df_records["burial_date"]
+    ]
+
+    df_records["birth_place"] = (
+        df_records["birth_place"]
+        .str.normalize("NFKD")
+        .str.encode("ascii", errors="ignore")
+        .str.decode("utf-8")
+    )
+
+    df_records["death_place"] = (
+        df_records["death_place"]
+        .str.normalize("NFKD")
+        .str.encode("ascii", errors="ignore")
+        .str.decode("utf-8")
+    )
+
+    df_records["burial_place"] = (
+        df_records["burial_place"]
+        .str.normalize("NFKD")
+        .str.encode("ascii", errors="ignore")
+        .str.decode("utf-8")
+    )
+
+    df_records = df_records.reindex(
+        columns=[
+            "full_name",
+            "relationship",
+            "collection",
+            "birth_date",
+            "birth_year",
+            "birth_place",
+            "death_date",
+            "death_year",
+            "death_place",
+            "burial_date",
+            "burial_year",
+            "burial_place",
+        ]
+    )
+
+    str_loc = ["country", "municipality", "town", "district"]
+
+    death_loc = ["death_" + s for s in str_loc]
+
+    birth_loc = ["birth_" + s for s in str_loc]
+
+    burial_loc = ["burial_" + s for s in str_loc]
+
+    def rev_split(x: pd.Series):
+        """Split elements."""
+        return pd.Series(list(reversed(x.split(", ", 4))))
+
+    death_num = df_records["death_place"].apply(rev_split).shape[1]
+
+    birth_num = df_records["birth_place"].apply(rev_split).shape[1]
+
+    burial_num = df_records["burial_place"].apply(rev_split).shape[1]
+
+    df_records[death_loc[:death_num]] = df_records["death_place"].apply(
+        rev_split
+    )
+
+    df_records[birth_loc[:birth_num]] = df_records["birth_place"].apply(
+        rev_split
+    )
+
+    df_records[burial_loc[:burial_num]] = df_records["burial_place"].apply(
+        rev_split
+    )
+
+    if google_drive:
+        drive_path = os.getenv("GoogleDrive")
+        if drive_path is not None:
+            drive_folder = Path(drive_path) / "records_data"
+            drive_folder.mkdir(exist_ok=True)
+            stata_file = drive_folder / "records_data.dta"
+            print("Data sucessfully exported to Google Drive!")
+        else:
+            print(
+                "The environment variable 'GoogleDrive' does not exist.",
+                "I will export the records to the Desktop.",
+            )
+            stata_file = FilePaths.stata_file
+    else:
+        stata_file = FilePaths.stata_file
+        print("Data successfully exported to the Desktop!")
+
+    # If the file does not already exist, unlinking will raise an Exception.
+    # If the file does exist, replacing might not work.
+    # Solution: do nothing if the file does not exist, if it exists delete it.
+    if stata_file.exists():
+        stata_file.unlink()
+
+    df_records.to_stata(
+        stata_file,
+        convert_dates={
+            "birth_date": "td",
+            "birth_year": "ty",
+            "death_date": "td",
+            "death_year": "ty",
+            "burial_date": "td",
+            "burial_year": "ty",
+        },
+    )

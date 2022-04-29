@@ -1,0 +1,5 @@
+{
+    "python.pythonPath": ".venv\\Scripts\\python.exe",
+    "github.gitAuthentication": false,
+    "python.formatting.provider": "black"
+}
